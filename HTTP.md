@@ -29,7 +29,7 @@ untuk HTTP/1.1 tidak diperlukan konfigurasi tambahan, karena Image Nginx yang su
 
 buat file `http2.conf` dan `http3.conf` di dalam direktori root.
 
-konfigurasi `http2.conf` sebagai berikut:
+-   konfigurasi `http2.conf` sebagai berikut:
 
 ```
 server {
@@ -45,5 +45,74 @@ server {
     }
 }
 ```
+
+-   konfigurasi `http3.conf` sebagai berikut:
+
+```
+server {
+    listen 443 ssl http2;
+    listen 443 quic reuseport;
+    listen [::]:443 ssl http2;
+    listen [::]:443 quic reuseport;
+
+    server_name localhost;
+
+    ssl_protocols TLSv1.3;
+    ssl_certificate /etc/ssl/nginx.crt;
+    ssl_certificate_key /etc/ssl/nginx.key;
+
+    http3 on;
+    add_header Alt-Svc 'h3=":443"; ma=86400'; # Notify clients about HTTP/3
+    add_header X-Content-Type-Options nosniff;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+}
+
+```
+
+**d. Create Container**
+
+-   Container untuk HTTP/1.1
+    perintah yang dijalankan adalah `docker create --name nginx-http1 -p 8888:80 nginx:latest`
+
+-   Container untuk HTTP/2.0
+    perintah yang dijalankan adalah:
+
+    ```
+    docker create --name nginx-http2 \
+    -v D:/docker/http2.conf:/etc/nginx/conf.d/default.conf \
+    -v D:/docker/cert:/etc/ssl:ro \
+    -p 8443:443 \
+    nginx:latest
+    ```
+
+-   container untuk HTTP/3.0
+    perintah yang dijalankan adalah:
+
+    ```
+    docker create --name nginx-http3 \
+    -v D:/docker/http3.conf:/etc/nginx/conf.d/default.conf \
+    -v D:/docker/cert:/etc/ssl:ro \
+    -p 443:443 \
+    nginx:latest
+    ```
+
+## 3. Jalankan Web Server
+
+-   HTTP/1.1 
+    running container untuk HTTP/1.1 `docker start nginx-http1`. Url pada chrome adalah `http://localhost:8888`
+
+-   HTTP/2.0
+    running container untuk HTTP/2.0 `docker start nginx-http2`. Url pada chrome adalah `https://localhost:8443`
+
+-   HTTP/3.0
+    running container untuk HTTP/3.0 `docker start nginx-http3`. Url pada chrome adalah `https://localhost`
+
+
+
+
 
 
