@@ -103,14 +103,17 @@ server {
 ## 3. Pengujian Web Server pada Chrome
 
 -   HTTP/1.1 
+
     running container untuk HTTP/1.1 `docker start nginx-http1`. Url pada chrome adalah `http://localhost:8888`
     ![http1](./img/http1.1.jpg)
 
 -   HTTP/2.0
+
     running container untuk HTTP/2.0 `docker start nginx-http2`. Url pada chrome adalah `https://localhost:8443`
     ![http2](./img/http2.jpg)
 
 -   HTTP/3.0
+
     running container untuk HTTP/3.0 `docker start nginx-http3`. Url pada chrome adalah `https://localhost`
 
 
