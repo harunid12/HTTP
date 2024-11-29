@@ -1,107 +1,139 @@
-# Tugas 1 : Analisis Komunikasi TCP dengan Socket Programming dan Wireshark
+# Web Server dengan HTTP
+untuk menguji apakah suatu web server menggunakan HTTP/1.1, HTTP/2.0, dan HTTP/3.0, menganalisis menggunakan Chrome, dan menganalisis lalu lintas data dengan Wireshark, berikut merupakan hal-hal yang akan dilakukan:
 
-Tugas ini bertujuan untuk mempelajari komunikasi TCP antara client dan server menggunakan socket programming serta melakukan monitoring jaringan dengan Wireshark. Proses ini mencakup pengiriman data sederhana dan analisis paket TCP untuk memahami alur komunikasi, termasuk Connection establishment using three-way handshaking, Data Transfer dan Connection termination using three-way handshaking.
+---
 
-## Deskripsi Singkat
+## 1. Persiapan Aplikasi
 
-Pada tugas ini, saya memanfaatkan socket programming sederhana dari [Repository Github](https://github.com/ferryastika/socket-programming-simple-server-and-client) untuk mengimplementasikan komunikasi client-server. Server dijalankan pada port **8000**, dan client terhubung ke server tersebut. Data yang dikirim berupa karakter **A** dan selanjutnya dianalisis alur transmisinya menggunakan Wireshark.
+-   **Docker**, Install Docker pada [link berikut](https://www.docker.com/). Pilih sesuai dengan Sistem Operasi masing-masing. Docker digunakan untuk menjalankan web server dalam container. hal ini memungkinkan pengujian berbagai versi protokol HTTP secara terisolasi tanpa menggangu antar entitas yang lain.
+-   **Wireshark**, Install Wireshark pada [link berikut](https://www.wireshark.org/). wireshark digunakan untuk menganalisis lalu lintas jaringan secara real-time.
+-   **Chrome**, pastikan aplikasi Chrome terinstall dengan versi terbaru.
 
-hasil analisis Wireshark digambarkan dalam diagram TCP Sequence, yang menunjukkan detail komunikasi TCP secara berurutan dimulai dari connection establishment hingga connection termination
+## 2. Konfigurasi Docker
 
-## TCP Sequence Diagram
+disini saya menggunakan web server **Nginx** karena mendukung pengunaan HTTP/1.1, HTTP/2.0, dan HTTP/3.0. Sebelum melakukan Konfigurasi, pastikan Docker Engine sudah running.
 
-**Connection Establishment (Three-way handshaking)**
+**a. Donwload Image**
 
-- **Step 1: SYN (Synchronize)**  
-   Client mengirimkan paket **SYN** dengan `Seq=0` ke Server untuk memulai koneksi.
+download image Web Server **Nginx** dari [Docker Hub](https://hub.docker.com/_/nginx) dengan perintah `docker pull nginx:latest` 
 
-- **Step 2: SYN-ACK (Synchronize-Acknowledgment)**
-  Server merespons dengan paket **SYN+ACK** yang memiliki Seq=0, Ack=1, menunjukkan bahwa server siap untuk menerima komunikasi.
+**b. Generate SSL/TLS**
 
-- **Step 3: ACK**
-  Client mengirimkan paket **ACK** dengan Seq=1, Ack=1, mengonfirmasi koneksi telah terjalin.
+SSL (Secure Sockets Layer) merupakan protokol kriptografi yang digunakan untuk mengamankan komunikasi data antara client dan server di internet. SSL ini digunakan pada HTTP/2.0 dan HTTP/3.0 untuk memastikan data yang ditransfer terenkripsi dengan aman, serta melindungi data dari intersepsi dan manipulasi oleh pihak ketiga. Pada praktiknya, SSL digantikan oleh TLS (Transport Layer Security).
 
-**Data Transfer**
-pada tahap ini, **Client** dan **Server** saling bertukar data. prosesnya melibatkan flag **PSH + ACK** dan **ACK**.
+perintah untuk generate nya adalah `openssl req -x509 -newkey rsa:2048 -keyout nginx.key -out nginx.crt -days 365`
 
-- **Step 4: PSH + ACK**  
-   Client mengirimkan data dengan paket : Seq = 1, Ack = 1.
+**c. Konfiguasi Nginx untuk HTTP/2.0**
 
-- **Step 5: ACK**
-  Server mengkonfirmasi penerimaan data dengan paket: Seq = 1, Ack = 2.
+untuk HTTP/1.1 tidak diperlukan konfigurasi tambahan, karena Image Nginx yang sudah di pull sebelumnya secara default berjalan pada HTTP/1.1
 
-- **Step 6: PSH + ACK**
-  Server mengirimkan data balik ke Client dengan paket : Seq = 1, Ack = 2.
+buat file `http2.conf`  di dalam direktori root.
 
-- **Step 7: ACK**
-  Client mengkonfirmasi penerimaan data dengan paket : Seq = 2, Ack =2.
+-   konfigurasi `http2.conf` sebagai berikut:
 
-**Connection termination (three-way handshaking)**
-Tahap ini adalah proses untuk menutup koneksi setelah pertukaran data selesai.
+```
+server {
+    listen 443 ssl http2;
+    server_name localhost;
 
-- **Step 8: FIN + ACK**
-  Client mengirimkan paket : Seq = 2, Ack = 2. paket **FIN** menunjukan bahwa Client ingin mengakhiri koneksi
+    ssl_certificate /etc/nginx/certs/nginx.crt;
+    ssl_certificate_key /etc/nginx/certs/nginx.key;
 
-- **Step 9: ACK**
-  Server mengonfirmasi permintaan dengan paket: Seq = 2, Ack = 3
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+}
+```
 
-- **Step 10: FIN + ACK**
-  Server mengirimkan FIN untuk mengakhiri koneksi dari sisi Server: Seq = 2, Ack = 3.
+<!-- -   konfigurasi `http3.conf` sebagai berikut:
 
-- **Step 11: ACK**
-  Client mengonfirmasi dengan paket: Seq = 3, Ack = 3. koneksi telah tertutup sepenuhnya.
+```
+server {
+    listen 443 ssl http2;
+    listen 443 quic reuseport;
+    listen [::]:443 ssl http2;
+    listen [::]:443 quic reuseport;
 
-## Penjelasan Tambahan
+    server_name localhost;
 
-- **Seq (Sequence Number):** Nomor urut yang digunakan untuk melacak byte data yang dikirimkan.
-- **Ack (Acknowledgment Number):** Nomor untuk mengonfirmasi byte data yang telah diterima.
-- **PSH (PUSH) :** Memberitahu penerima untuk segera memproses data.
-- **FIN (Final) :** Digunakan untuk mengakhiri koneksi.
+    ssl_protocols TLSv1.3;
+    ssl_certificate /etc/ssl/nginx.crt;
+    ssl_certificate_key /etc/ssl/nginx.key;
 
+    http3 on;
+    add_header Alt-Svc 'h3=":443"; ma=86400'; # Notify clients about HTTP/3
+    add_header X-Content-Type-Options nosniff;
 
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+    }
+}
 
-# Tugas 2 : Analisis Koneksi TCP Menggunakan Wireshark
+``` -->
 
-## Deskripsi Singkat
+**d. Create Container**
 
-Pada tugas ini, saya melakukan analisis terhadap komunikasi TCP antara client dan server berdasarkan sample capture Wireshark yang diberikan, yaitu file **http.cap**. dari sample capture ini, analisis dilakukan untuk mengamati alur komunikasi mulai dari Connection establishment using three-way handshaking, Data Transfer dan Connection termination using three-way handshaking.
+-   Container untuk HTTP/1.1
+    perintah yang dijalankan adalah `docker create --name nginx-http1 -p 8888:80 nginx:latest`
 
-Dari **43 paket** yang tercatat dalam file capture **http.cap**,  hanya **34 paket** yang berhasil diproses dalam komunikasi TCP yang melibatkan client dan server.
+-   Container untuk HTTP/2.0
+    perintah yang dijalankan adalah:
 
+    ```
+    docker create --name nginx-http2 \
+    -v D:/docker/http2.conf:/etc/nginx/conf.d/default.conf \
+    -v D:/docker/cert:/etc/ssl:ro \
+    -p 8443:443 \
+    nginx:latest
+    ```
 
-## TCP Sequence Diagram
+<!-- -   container untuk HTTP/3.0
+    perintah yang dijalankan adalah:
 
-**1. Connection Establishment (Three-way handshaking)**
+    ```
+    docker create --name nginx-http3 \
+    -v D:/docker/http3.conf:/etc/nginx/conf.d/default.conf \
+    -v D:/docker/cert:/etc/ssl:ro \
+    -p 443:443 \
+    nginx:latest
+    ``` -->
 
-- **Client** mengirimkan paket **SYN** untuk memulai koneksi
-- **Server** merespon dengan paket **SYN + ACK** untuk mengkonfirmasi penerimaan dan siap berkomunikasi
-- **Client** kemudian mengirimkan **ACK** untuk menyelesaikan handshake dan membuka koneksi
-- tahap ini digambarkan pada TCP Sequence diagram dimulai dari step 1-3.
+## 3. Pengujian Web Server pada Chrome
 
-**2. Data Transfer** 
+-   **HTTP/1.1**
 
-- **Step 4: PSH + ACK**
-   Seq = 1, Ack = 1. Client mengirimkan 479 byte data.
+    running container untuk HTTP/1.1 `docker start nginx-http1`. Url pada chrome adalah `http://localhost:8888`
+    ![http1](./img/http1.1.jpg)
 
-- **Step 5: ACK**
-   Seq = 1, Ack = 480. Server mengonfirmasi penerimaan data yang dikirim oleh client, Ack = 480 menunjukkan bahwa server sudah menerima data hingga byte ke 479 dari client dan mengharapkan data selanjutnya dimulai dari byte 480.
+-   **HTTP/2.0**
 
-- **Step 6: ACK**
-   Seq = 1, Ack = 480. Server mengirimkan 1380 byte data dimulai dari Seq = 1, yang berarti data yang dikirimkan dimulai dari byte ke-1 hingga byte ke-1380.
+    running container untuk HTTP/2.0 `docker start nginx-http2`. Url pada chrome adalah `https://localhost:8443`
+    ![http2](./img/http2.jpg)
 
-- **Step 7: ACK**
-   Seq = 480, Ack = 1381. Client mengkonfirmasi penerimaan data dari server dengan Ack = 1381, menunjukkan bahwa client sudah menerima semua data hinga byte ke 1380 dari server. Seq = 480 menunjukkan urutan data yang dikirimkan oleh client setelah menerima data dari server.
+<!-- -   **HTTP/3.0**
 
-Proses Data Transfer terus berlanjut hingga Step 30. Data yang dikirimkan akan terus memiliki urutan nomor Sequence yang sesuai, dan Acknowledgment Number dari kedua pihak akan mengonfirmasi bahwa setiap paket diterima dengan benar. Setelah seluruh data terkirim, koneksi akan ditutup dengan paket FIN untuk mengakhiri sesi komunikasi.
+    running container untuk HTTP/3.0 `docker start nginx-http3`. Url pada chrome adalah `https://localhost` -->
 
-**3. Connection termination (three-way handshaking)** 
+**4. Analisis Paket di WireShark**
 
-- **Step 31 :** Server mengirimkan **FIN + ACK** yang menandakan bahwa server ingin menutup koneksi.
-- **Step 32 :** Client mengkonfirmasi dengan **ACK**.
-- **Step 33 :** Client mengirimkan **FIN + ACK** yang menandakan bahwa client juga ingin menutup koneksi.
-- **Step 34 :** server mengkonfirmasi penutupan koneksi dengan **ACK**.
+Jalankan aplikasi Wireshark kemudian pilih Capture Interface nya adalah **Adapter for loopback traffic capture**.
 
+-   **HTTP/1.1**
 
+    berikut merupakan paket yang ditangkap dari pengujian web server dengan HTTP/1.1
+    ![http1](./img/capture_http1.jpg)
+
+    pada capture paket Wireshark diatas, protocol nya adalah TCP. HTTP/1.1 bekerja diatas protocol TCP.
+    
+
+-   HTTP/2.0
+
+    berikut merupakan paket yang ditangkap dari pengujian web server dengan HTTP/1.1
+    ![http2](./img/capture_http2.jpg)
+
+    pada cature paket Wireshark diatas, terdapat 2 protocol yaitu TCP dan TLSv1.3. Kedua protokol, TCP dan TLSv1.3, muncul dalam capture Wireshark saat menggunakan HTTP/2.0 karena HTTP/2.0 beroperasi di atas TCP untuk pengiriman data dan di atas TLS untuk enkripsi.
 
 
 
